@@ -19,27 +19,26 @@
 #
 #-------------------------------------------------------------
 
-
-# Builtin function Implements Lasso regression with sparsity algorithm
+# Builtin function for the SpaRSA algorithm to perform lasso regression
+# (SpaRSA .. Sparse Reconstruction by Separable Approximation)
 #
-# INPUT PARAMETERS:
+# INPUTS:
 # ---------------------------------------------------------------------------------------------
-# NAME            TYPE    DEFAULT     MEANING
+# NAME            TYPE     DEFAULT     MEANING
 # ---------------------------------------------------------------------------------------------
-# X               Double  ---         matrix X is design matrix
-# y               Double  ---         matrix Y columns of the design matrix
+# X               Double   ---         input feature matrix
+# y               Double   ---         matrix Y columns of the design matrix
+# tol             Double   1e-15       target convergence tolerance
+# M               Integer  5           history length
+# tau             Double   1           regularization component
+# maxi            Integer  100         maximum number of iterations until convergence
 # ---------------------------------------------------------------------------------------------
-
-
-#Output(s)
-# ---------------------------------------------------------------------------------------------
-# NAME            TYPE    DEFAULT     MEANING
-# ---------------------------------------------------------------------------------------------
+# OUTPUTS
 # w               Double   ---        model matrix
 
 
-
-m_lasso = function(Matrix[Double] X, Matrix[Double] y, double tol = 10^(-15), int M = 5, int tau = 1, int maxiter = 1000, Boolean verbose = FALSE)
+m_lasso = function(Matrix[Double] X, Matrix[Double] y, Double tol = 10^(-15), 
+  Integer M = 5, Double tau = 1, Integer maxi = 100, Boolean verbose = TRUE)
   return(Matrix[Double] w)
 {
   n = nrow(X)
@@ -54,7 +53,7 @@ m_lasso = function(Matrix[Double] X, Matrix[Double] y, double tol = 10^(-15), in
   #init
   alpha = 1
   w = Rand(rows=m, cols=1, min=0, max=1, pdf="uniform")
-  history = -1*10^30 * matrix(1, rows=M, cols=1)
+  history = -1e30 * matrix(1, rows=M, cols=1)
 
   r = X %*% w - y
   g = t(X) %*% r
@@ -68,60 +67,58 @@ m_lasso = function(Matrix[Double] X, Matrix[Double] y, double tol = 10^(-15), in
   inactive_set = matrix(1, rows=m, cols=1)
   iter = 0
   continue = TRUE
-  while(iter < maxiter & continue) {
-      dw = matrix(0, rows=m, cols=1)
-      dg = matrix(0, rows=m, cols=1)
-      relChangeObj = -1.0
+  while(iter < maxi & continue) {
+    dw = matrix(0, rows=m, cols=1)
+    dg = matrix(0, rows=m, cols=1)
+    relChangeObj = -1.0
 
-      inner_iter = 0
-      inner_continue = TRUE
-      inner_maxiter = 100
-      while(inner_iter < inner_maxiter & inner_continue) {
-          u = w - g/alpha
-          lambda = tau/alpha
+    inner_iter = 0
+    inner_continue = TRUE
+    inner_maxiter = 100
+    while(inner_iter < inner_maxiter & inner_continue) {
+      u = w - g/alpha
+      lambda = tau/alpha
 
-          wnew = sign(u) * (abs(u) - lambda) * ((abs(u) - lambda) > 0)
-          dw = wnew - w
-          dw2 = sum(dw*dw)
+      wnew = sign(u) * (abs(u) - lambda) * ((abs(u) - lambda) > 0)
+      dw = wnew - w
+      dw2 = sum(dw*dw)
 
-          r = X %*% wnew - y
-          gnew = t(X) %*% r
-          objnew = 0.5 * sum(r*r) + tau*sum(abs(wnew))
-          obj_threshold = max(history) - 0.5*sigma*alpha*dw2
+      r = X %*% wnew - y
+      gnew = t(X) %*% r
+      objnew = 0.5 * sum(r*r) + tau*sum(abs(wnew))
+      obj_threshold = max(history) - 0.5*sigma*alpha*dw2
 
-          if(objnew <= obj_threshold) {
-              w = wnew
-              dg = gnew - g
-              g = gnew
-              inner_continue = FALSE
+      if(objnew <= obj_threshold) {
+        w = wnew
+        dg = gnew - g
+        g = gnew
+        inner_continue = FALSE
 
-              history[1:(M-1),] = history[2:M,]
-              history[M,1] = objnew
-              relChangeObj = abs(objnew - obj)/obj
-              obj = objnew
-          }
-          else
-              alpha = eta*alpha
-
-          inner_iter = inner_iter + 1
+        history[1:(M-1),] = history[2:M,]
+        history[M,1] = objnew
+        relChangeObj = abs(objnew - obj)/obj
+        obj = objnew
       }
+      else
+        alpha = eta*alpha
 
-      if(inner_continue)
-          print("Inner loop did not converge")
+      inner_iter = inner_iter + 1
+    }
 
-      alphanew = sum(dw*dg)/sum(dw*dw)
-      alpha = max(alpha_min, min(alpha_max, alphanew))
+    if(inner_continue)
+      print("Inner loop did not converge")
 
-      old_inactive_set = inactive_set
-      inactive_set = w != 0
-      diff = sum(abs(old_inactive_set - inactive_set))
+    alphanew = sum(dw*dg)/sum(dw*dw)
+    alpha = max(alpha_min, min(alpha_max, alphanew))
 
-      if(diff == 0 & relChangeObj < tol)
-          continue = FALSE
+    old_inactive_set = inactive_set
+    inactive_set = w != 0
+    diff = sum(abs(old_inactive_set - inactive_set))
+    continue = (diff != 0 | relChangeObj >= tol)
 
-      num_inactive = sum(w != 0)
-      if( verbose )
-        print("ITER=" + iter + " OBJ=" + obj + " relative change=" + relChangeObj + " num_inactive=" + num_inactive)
-      iter = iter + 1
+    num_inactive = sum(w != 0)
+    if( verbose )
+      print("ITER=" + iter + " OBJ=" + obj + " relative change=" + relChangeObj + " num_inactive=" + num_inactive)
+    iter = iter + 1
   }
 }

@@ -25,33 +25,32 @@
 
 # INPUT PARAMETERS:
 # ---------------------------------------------------------------------------------------------
-# NAME   	TYPE   DEFAULT  MEANING
+# NAME      TYPE    DEFAULT  MEANING
 # ---------------------------------------------------------------------------------------------
-# X  	 	String ---      location to read the matrix X input matrix
-# k      	Int    ---      indicates dimension of the new vector space constructed from eigen vectors
-# tolobj 	Int    0.00001  objective function tolerance value to stop ppca algorithm
-# tolrecerr	Int    0.02     reconstruction error tolerance value to stop the algorithm
-# iter   	Int    10       maximum number of iterations
+# X         Matrix  ---      n x m input feature matrix
+# k         Integer ---      indicates dimension of the new vector space constructed from eigen vectors
+# maxi      Integer ---      maximum number of iterations until convergence
+# tolobj    Double  0.00001  objective function tolerance value to stop ppca algorithm
+# tolrecerr Double  0.02     reconstruction error tolerance value to stop the algorithm
+# verbose   Boolen  TRUE     verbose debug output
 # ---------------------------------------------------------------------------------------------
 # OUTPUT PARAMETERS:
 # ---------------------------------------------------------------------------------------------
 # NAME   TYPE   DEFAULT  MEANING
 # ---------------------------------------------------------------------------------------------
-# C     	Matrix  ---     principal components
-# V      	Matrix  ---     eigenvalues / eigenvalues of principal components
-#
+# Xout   Matrix  ---      Output feature matrix with K columns
+# Mout   Matrix  ---      Output dominant eigen vectors (can be used for projections)
 
 
-m_pcaa = function(Matrix[Double] X, int iter = 10, double tolobj = 0.00001, double tolrecerr = 0.02, Boolean verbose = FALSE)
-  return(Matrix[Double] PC, Matrix[Double] V)
+m_ppca = function(Matrix[Double] X, Integer K=2, Integer maxi = 10, 
+  Double tolobj = 0.00001, Double tolrecerr = 0.02, Boolean verbose = TRUE)
+  return(Matrix[Double] Xout, Matrix[Double] Mout)
 {
-
-  k = ncol(X)
   n = nrow(X);
   m = ncol(X);
 
   #initializing principal components matrix
-  C =  rand(rows=m, cols=k, pdf="normal");
+  C =  rand(rows=m, cols=K, pdf="normal");
   ss = rand(rows=1, cols=1, pdf="normal");
   ss = as.scalar(ss);
   ssPrev = ss;
@@ -72,63 +71,63 @@ m_pcaa = function(Matrix[Double] X, int iter = 10, double tolobj = 0.00001, doub
   Xm = X - colMeans(X);
 
   #I -> k x k
-  ITMP = matrix(1,rows=k,cols=1);
+  ITMP = matrix(1,rows=K,cols=1);
   I = diag(ITMP);
 
   i = 0;
-  while (i < iter & ObjRelChng > tolobj & RE > tolrecerr){
-      #Estimation step - Covariance matrix
-      #M -> k x k
-      M = t(C) %*% C + I*ss;
+  while (i < maxi & ObjRelChng > tolobj & RE > tolrecerr){
+    #Estimation step - Covariance matrix
+    #M -> k x k
+    M = t(C) %*% C + I*ss;
 
-      #Auxilary matrix with n latent variables
-      # Z -> n x k
-      Z = Xm %*% (C %*% inv(M));
+    #Auxilary matrix with n latent variables
+    # Z -> n x k
+    Z = Xm %*% (C %*% inv(M));
 
-      #ZtZ -> k x k
-      ZtZ = t(Z) %*% Z + inv(M)*ss;
+    #ZtZ -> k x k
+    ZtZ = t(Z) %*% Z + inv(M)*ss;
 
-      #XtZ -> m x k
-      XtZ = t(Xm) %*% Z;
+    #XtZ -> m x k
+    XtZ = t(Xm) %*% Z;
 
-      #Maximization step
-      #C ->  m x k
-      ZtZ_sum = sum(ZtZ); #+n*inv(M));
-      C = XtZ/ZtZ_sum;
+    #Maximization step
+    #C ->  m x k
+    ZtZ_sum = sum(ZtZ); #+n*inv(M));
+    C = XtZ/ZtZ_sum;
 
-      #ss2 -> 1 x 1
-      ss2 = trace(ZtZ * (t(C) %*% C));
+    #ss2 -> 1 x 1
+    ss2 = trace(ZtZ * (t(C) %*% C));
 
-      #ss3 -> 1 x 1
-      ss3 = sum((Z %*% t(C)) %*% t(Xm));
+    #ss3 -> 1 x 1
+    ss3 = sum((Z %*% t(C)) %*% t(Xm));
 
-      #Frobenius norm of reconstruction error -> Euclidean norm
-      #Fn -> 1 x 1
-      Fn = sum(Xm*Xm);
+    #Frobenius norm of reconstruction error -> Euclidean norm
+    #Fn -> 1 x 1
+    Fn = sum(Xm*Xm);
 
-      #ss -> 1 x 1
-      ss = (Fn + ss2 - 2*ss3)/(n*m);
+    #ss -> 1 x 1
+    ss = (Fn + ss2 - 2*ss3)/(n*m);
 
-      #calculating objective function relative change
-      ObjRelChng = abs(1 - ss/ssPrev);
-      #print("Objective Relative Change: " + ObjRelChng + ", Objective: " + ss);
+    #calculating objective function relative change
+    ObjRelChng = abs(1 - ss/ssPrev);
+    #print("Objective Relative Change: " + ObjRelChng + ", Objective: " + ss);
 
-      #Reconstruction error
-      R = ((Z %*% t(C)) -  Xm);
+    #Reconstruction error
+    R = ((Z %*% t(C)) -  Xm);
 
-      #calculate the error
-      #TODO rethink calculation of reconstruction error ....
-      #1-Norm of reconstruction error - a big dense matrix
-      #RE -> n x m
-      RE = abs(sum(R)/sum(Xm));
-      if (RE < REBest){
-          PC = C;
-          REBest = RE;
-      }
-      #print("ss: " + ss +" = Fn( "+ Fn +" ) + ss2( " + ss2  +" ) - 2*ss3( " + ss3 + " ), Reconstruction Error: " + RE);
+    #calculate the error
+    #TODO rethink calculation of reconstruction error ....
+    #1-Norm of reconstruction error - a big dense matrix
+    #RE -> n x m
+    RE = abs(sum(R)/sum(Xm));
+    if (RE < REBest){
+      PC = C;
+      REBest = RE;
+    }
+    #print("ss: " + ss +" = Fn( "+ Fn +" ) + ss2( " + ss2  +" ) - 2*ss3( " + ss3 + " ), Reconstruction Error: " + RE);
 
-      ssPrev = ss;
-      i = i+1;
+    ssPrev = ss;
+    i = i+1;
   }
   if( verbose )
     print("Objective Relative Change: " + ObjRelChng);
@@ -137,15 +136,14 @@ m_pcaa = function(Matrix[Double] X, int iter = 10, double tolobj = 0.00001, doub
 
   # reconstructs data
   # RD -> n x k
-  RD = X %*% PC;
+  Xout = X %*% PC;
 
   # calculate eigenvalues - principle component variance
-  RDMean = colMeans(RD);
-  V = t(colMeans(RD*RD) - (RDMean*RDMean));
+  RDMean = colMeans(Xout);
+  V = t(colMeans(Xout^2) - (RDMean^2));
 
   # sorting eigenvalues and eigenvectors in decreasing order
   V_decr_idx = order(target=V,by=1,decreasing=TRUE,index.return=TRUE);
   VF_decr = table(seq(1,nrow(V)),V_decr_idx);
-  V = VF_decr %*% V;
-  PC = PC %*% VF_decr;
+  Mout = PC %*% VF_decr;  # vectors (values via VF_decr %*% V)
 }
